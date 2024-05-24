@@ -86,16 +86,31 @@ inline void to_json(json &j, const ExecutionContext &context) {
   if (context.simulationState) {
     j["simulationData"] = json();
     j["simulationData"]["dim"] = context.simulationState->getTensor().extents;
-    std::vector<std::complex<double>> hostData(
-        context.simulationState->getNumElements());
-    if (context.simulationState->isDeviceData()) {
-      context.simulationState->toHost(hostData.data(), hostData.size());
-      j["simulationData"]["data"] = hostData;
+    if (context.simulationState->getPrecision() ==
+        cudaq::SimulationState::precision::fp32) {
+      std::vector<std::complex<float>> hostData(
+          context.simulationState->getNumElements());
+      if (context.simulationState->isDeviceData()) {
+        context.simulationState->toHost(hostData.data(), hostData.size());
+        j["simulationData"]["data"] = hostData;
+      } else {
+        auto *ptr = reinterpret_cast<std::complex<float> *>(
+            context.simulationState->getTensor().data);
+        j["simulationData"]["data"] = std::vector<std::complex<float>>(
+            ptr, ptr + context.simulationState->getNumElements());
+      }
     } else {
-      auto *ptr = reinterpret_cast<std::complex<double> *>(
-          context.simulationState->getTensor().data);
-      j["simulationData"]["data"] = std::vector<std::complex<double>>(
-          ptr, ptr + context.simulationState->getNumElements());
+      std::vector<std::complex<double>> hostData(
+          context.simulationState->getNumElements());
+      if (context.simulationState->isDeviceData()) {
+        context.simulationState->toHost(hostData.data(), hostData.size());
+        j["simulationData"]["data"] = hostData;
+      } else {
+        auto *ptr = reinterpret_cast<std::complex<double> *>(
+            context.simulationState->getTensor().data);
+        j["simulationData"]["data"] = std::vector<std::complex<double>>(
+            ptr, ptr + context.simulationState->getNumElements());
+      }
     }
   }
 
@@ -108,6 +123,10 @@ inline void to_json(json &j, const ExecutionContext &context) {
     j["spin"]["data"] = spinOpRepr;
   }
   j["registerNames"] = context.registerNames;
+  if (context.overlapResult.has_value())
+    j["overlapResult"] = context.overlapResult.value();
+  if (!context.amplitudeMaps.empty())
+    j["amplitudeMaps"] = context.amplitudeMaps;
 }
 
 inline void from_json(const json &j, ExecutionContext &context) {
@@ -137,14 +156,30 @@ inline void from_json(const json &j, ExecutionContext &context) {
 
   if (j.contains("simulationData")) {
     std::vector<std::size_t> stateDim;
-    std::vector<std::complex<double>> stateData;
-    j["simulationData"]["dim"].get_to(stateDim);
-    j["simulationData"]["data"].get_to(stateData);
-
-    // Create the simulation specific SimulationState
     auto *simulator = cudaq::get_simulator();
-    context.simulationState = simulator->createStateFromData(
-        std::make_pair(stateData.data(), stateDim[0]));
+    if (simulator->name().find("fp32") != std::string::npos) {
+      std::vector<std::complex<float>> stateData;
+      j["simulationData"]["dim"].get_to(stateDim);
+      j["simulationData"]["data"].get_to(stateData);
+      context.simulationState = simulator->createStateFromData(
+          std::make_pair(stateData.data(), stateDim[0]));
+    } else {
+      std::vector<std::complex<double>> stateData;
+      j["simulationData"]["dim"].get_to(stateDim);
+      j["simulationData"]["data"].get_to(stateData);
+      context.simulationState = simulator->createStateFromData(
+          std::make_pair(stateData.data(), stateDim[0]));
+    }
+  }
+
+  if (j.contains("overlapResult")) {
+    std::complex<double> overlapResult;
+    j.at("overlapResult").get_to(overlapResult);
+    context.overlapResult = overlapResult;
+  }
+
+  if (j.contains("amplitudeMaps")) {
+    j.at("amplitudeMaps").get_to(context.amplitudeMaps);
   }
 
   if (j.contains("registerNames"))
@@ -158,6 +193,18 @@ NLOHMANN_JSON_SERIALIZE_ENUM(CodeFormat, {
                                              {CodeFormat::MLIR, "MLIR"},
                                              {CodeFormat::LLVM, "LLVM"},
                                          });
+// Encapsulate the IR payload
+struct IRPayLoad {
+  // Underlying code (IR) payload as a Base64 string.
+  std::string ir;
+
+  // Name of the entry-point kernel.
+  std::string entryPoint;
+
+  // Serialized kernel arguments.
+  std::vector<uint8_t> args;
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(IRPayLoad, ir, entryPoint, args);
+};
 
 // Payload from client to server for a kernel execution.
 class RestRequest {
@@ -189,7 +236,12 @@ public:
   //     QIR functions, etc.
   // IMPORTANT: When a new version is defined, a new NVQC deployment will be
   // needed.
-  static constexpr std::size_t REST_PAYLOAD_VERSION = 1;
+  // Version history:
+  // 1. First NVQC release (CUDA-Q v0.7)
+  // 2. CUDA-Q v0.8
+  //   - Support CUDA-Q state handling: overlap and amplitude data; multiple
+  //   kernel IR payloads.
+  static constexpr std::size_t REST_PAYLOAD_VERSION = 2;
   RestRequest(ExecutionContext &context, int versionNumber)
       : executionContext(context), version(versionNumber),
         clientVersion(CUDA_QUANTUM_VERSION) {}
@@ -203,10 +255,7 @@ public:
       m_deserializedSpinOp.reset(executionContext.spin.value());
   }
 
-  // Underlying code (IR) payload as a Base64 string.
-  std::string code;
-  // Name of the entry-point kernel.
-  std::string entryPoint;
+  std::vector<IRPayLoad> code;
   // Name of the NVQIR simulator to use.
   std::string simulator;
   // The ExecutionContext to run the simulation.
@@ -219,16 +268,15 @@ public:
   std::size_t seed;
   // List of MLIR passes to be applied on the code before execution.
   std::vector<std::string> passes;
-  // Serialized kernel arguments.
-  std::vector<uint8_t> args;
+
   // Version of this schema for compatibility check.
   std::size_t version;
   // Version of the runtime client submitting the request.
   std::string clientVersion;
 
-  NLOHMANN_DEFINE_TYPE_INTRUSIVE(RestRequest, version, entryPoint, simulator,
-                                 executionContext, code, args, format, seed,
-                                 passes, clientVersion);
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(RestRequest, version, simulator,
+                                 executionContext, code, format, seed, passes,
+                                 clientVersion);
 };
 
 /// NVCF function version status
