@@ -98,22 +98,15 @@ if [ "$1" == "install-gcc" ]; then
 fi
 
 # [>ToolchainConfiguration]
-GCC_INSTALL_PREFIX=/opt/rh/gcc-toolset-11
-export CXX="${GCC_INSTALL_PREFIX}/root/usr/bin/g++"
-export CC="${GCC_INSTALL_PREFIX}/root/usr/bin/gcc"
-export FC="${GCC_INSTALL_PREFIX}/root/usr/bin/gfortran"
+export GCC_TOOLCHAIN=/opt/rh/gcc-toolset-11/root/usr/
+export CXX="${GCC_TOOLCHAIN}/bin/g++"
+export CC="${GCC_TOOLCHAIN}/bin/gcc"
 export CUDACXX=/usr/local/cuda/bin/nvcc
+export CUDAHOSTCXX="${GCC_TOOLCHAIN}/bin/g++"
 # [<ToolchainConfiguration]
 
-if [ "$1" == "install-prereqs" ]; then
-    export LDFLAGS="-static-libgcc -static-libstdc++"
-    export LLVM_PROJECTS='clang;lld;mlir'
-    this_file_dir=`dirname "$(readlink -f "${BASH_SOURCE[0]}")"`
-    bash "$this_file_dir/install_prerequisites.sh"
-fi
-
 if [ "$1" == "build-openmpi" ]; then
-    source $GCC_INSTALL_PREFIX/enable
+    source "${GCC_TOOLCHAIN}/../../enable"
 
 # [>OpenMPIBuild]
     OPENMPI_VERSION=4.1.4

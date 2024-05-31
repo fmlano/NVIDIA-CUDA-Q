@@ -6,18 +6,13 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#pragma once
-#define PLATFORM_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
-#define LLVM_INCLUDE_DIR "@LLVM_INCLUDE_DIRS@"
-#define LLVM_ROOT "@LLVM_BINARY_DIR@"
-#ifndef LLVM_CONFIG_H
-#include "llvm/Config/llvm-config.h"
-#endif
-#ifndef LLVM_TARGET_TRIPLE
-#define LLVM_TARGET_TRIPLE LLVM_DEFAULT_TARGET_TRIPLE
-#endif
+#define __NVQIR_CUSTATEVEC_TOGGLE_CREATE
+#include "CuStateVecCircuitSimulator.cpp"
+/// Register this Simulator with NVQIR.
+template <>
+std::string CuStateVecCircuitSimulator<float>::name() const {
+  return "custatevec-fp32";
+}
+NVQIR_REGISTER_SIMULATOR(CuStateVecCircuitSimulator<float>, custatevec_fp32)
 
-// This is used by cudaq-quake as a backup search location
-// for required cudaq headers. We will search this install 
-// directory first 
-#define FALLBACK_CUDAQ_INCLUDE_DIR "@CMAKE_SOURCE_DIR@/runtime"
+#undef __NVQIR_CUSTATEVEC_TOGGLE_CREATE

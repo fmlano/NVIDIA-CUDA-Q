@@ -6,13 +6,19 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#define __NVQIR_CUSTATEVEC_TOGGLE_CREATE
-#include "CuStateVecCircuitSimulator.cu"
-/// Register this Simulator with NVQIR.
-template<>
-std::string CuStateVecCircuitSimulator<float>::name() const {
-  return "custatevec-fp32";
-}
-NVQIR_REGISTER_SIMULATOR(CuStateVecCircuitSimulator<float>, custatevec_fp32)
+#pragma once
+#include <cstddef>
+#include <stdint.h>
 
-#undef __NVQIR_CUSTATEVEC_TOGGLE_CREATE
+namespace nvqir {
+
+template <typename CudaDataType>
+void setFirstNElements(uint32_t n_blocks, int32_t threads_per_block,
+                       void *newDeviceStateVector, void *deviceStateVector,
+                       size_t previousStateDimension);
+
+template <typename CudaDataType>
+void initializeDeviceStateVector(uint32_t n_blocks, int32_t threads_per_block,
+                                 void *deviceStateVector,
+                                 size_t stateDimension);
+} // namespace nvqir
