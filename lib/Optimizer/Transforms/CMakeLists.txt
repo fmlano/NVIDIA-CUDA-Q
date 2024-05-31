@@ -37,11 +37,12 @@ add_cudaq_library(OptTransforms
   MultiControlDecomposition.cpp
   ObserveAnsatz.cpp
   PruneCtrlRelations.cpp
+  PySynthCallableBlockArgs.cpp
   QuakeAddMetadata.cpp
   QuakeSynthesizer.cpp
   RefToVeqAlloc.cpp
-  RegToMem.cpp
-  PySynthCallableBlockArgs.cpp
+  RegToMem.cpp  
+  UnitarySynthesis.cpp
 
   DEPENDS
     OptTransformsPassIncGen
@@ -54,3 +55,8 @@ add_cudaq_library(OptTransforms
     OptimBuilder
     QuakeDialect
 )
+
+target_include_directories(OptTransforms SYSTEM
+   PRIVATE 
+     ${CMAKE_SOURCE_DIR}/tpls/xtl/include 
+     ${CMAKE_SOURCE_DIR}/tpls/xtensor/include)

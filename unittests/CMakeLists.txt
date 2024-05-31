@@ -38,6 +38,7 @@ set(CUDAQ_RUNTIME_TEST_SOURCES
   integration/get_state_tester.cpp
   integration/measure_reset_tester.cpp
   qir/NVQIRTester.cpp
+  qis/CustomOpTester.cpp
   qis/QubitQISTester.cpp
   integration/kernels_tester.cpp
   common/MeasureCountsTester.cpp
@@ -80,7 +81,7 @@ macro (create_tests_with_backend NVQIR_BACKEND EXTRA_BACKEND_TESTER)
     set(TEST_LABELS "gpu_required")
   endif()
   if (${NVQIR_BACKEND} STREQUAL "tensornet-mps")
-    target_compile_definitions(${TEST_EXE_NAME} PRIVATE -DCUDAQ_BACKEND_TENSORNET)
+    target_compile_definitions(${TEST_EXE_NAME} PRIVATE -DCUDAQ_BACKEND_TENSORNET -DCUDAQ_BACKEND_TENSORNET_MPS)
     set(TEST_LABELS "gpu_required")
   endif()
   if (${NVQIR_BACKEND} STREQUAL "custatevec-fp32")
